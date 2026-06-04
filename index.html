@@ -1,0 +1,996 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Omi Eko Marine Monitoring</title>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow+Condensed:wght@300;400;600;700&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --ink:#e0f2fe;--ink2:#bae6fd;--ink3:#7dd3fc;
+  --bg:#010b19;--bg2:#031428;--bg3:#051f3d;--bg4:#0a325e;
+  --cyan:#00d2ff;--cyan2:#00a3cc;--teal:#025a88;
+  --amber:#f5a623;--red:#ff4d4d;--green:#00e87a;--blue:#4da6ff;
+  --purple:#d08aff;
+  --border:rgba(0,210,255,0.15);--border2:rgba(0,210,255,0.3);
+}
+body{background:var(--bg);color:var(--ink);font-family:'Barlow Condensed',sans-serif;min-height:100vh;padding:0}
+.mono{font-family:'Share Tech Mono',monospace}
+.dashboard{background:var(--bg);min-height:100vh;padding:16px}
+
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;margin-bottom:14px}
+.topbar-left{display:flex;align-items:center;gap:16px}
+.logo-mark{width:36px;height:36px;position:relative}
+.sonar-ring{position:absolute;border:1px solid var(--cyan);border-radius:50%;animation:sonarPulse 2.5s ease-out infinite}
+.sonar-ring:nth-child(1){width:36px;height:36px;top:0;left:0;animation-delay:0s}
+.sonar-ring:nth-child(2){width:24px;height:24px;top:6px;left:6px;animation-delay:0.5s;opacity:0.7}
+.sonar-ring:nth-child(3){width:12px;height:12px;top:12px;left:12px;animation-delay:1s;opacity:0.5;background:var(--cyan)}
+@keyframes sonarPulse{0%{opacity:1;transform:scale(1)}100%{opacity:0;transform:scale(1.6)}}
+.brand{font-size:20px;font-weight:700;letter-spacing:3px;color:var(--cyan);text-transform:uppercase}
+.brand span{color:var(--ink3);font-weight:300}
+.system-label{font-size:11px;color:var(--ink3);letter-spacing:2px;text-transform:uppercase;margin-top:1px}
+.status-row{display:flex;align-items:center;gap:20px}
+.status-pill{display:flex;align-items:center;gap:6px;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--ink2)}
+.pulse-dot{width:7px;height:7px;border-radius:50%;background:var(--green);animation:blink 1.4s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0.3}}
+.pulse-dot.warn{background:var(--amber)}
+.clock{font-family:'Share Tech Mono',monospace;font-size:14px;color:var(--cyan);letter-spacing:2px}
+.coords{font-size:10px;color:var(--ink3);letter-spacing:1px}
+
+/* HIGH-DENSITY INTERFACES */
+.kpi-grid{display:grid;grid-template-columns:repeat(8,1fr);gap:8px;margin-bottom:8px}
+.kpi-card{background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:8px 10px;position:relative;overflow:hidden;cursor:default;transition:border-color 0.3s}
+.kpi-card:hover{border-color:var(--border2)}
+.kpi-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--kpi-accent,var(--cyan)),transparent);opacity:0.6}
+.kpi-label{font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--ink3);margin-bottom:4px}
+.kpi-value{font-family:'Share Tech Mono',monospace;font-size:18px;font-weight:400;color:var(--kpi-accent,var(--cyan));line-height:1;margin-bottom:2px}
+.kpi-unit{font-size:9px;color:var(--ink3);letter-spacing:0.5px}
+.kpi-trend{font-size:10px;margin-top:2px}
+.kpi-trend.up{color:var(--green)}
+.kpi-trend.down{color:var(--red)}
+.kpi-trend.warn{color:var(--amber)}
+.kpi-sparkline{height:18px;width:100%;margin-top:4px}
+
+.main-grid{display:grid;grid-template-columns:1fr 320px;gap:12px;margin-bottom:12px}
+.left-column {display: flex; flex-direction: column; gap: 12px;}
+.right-column {display: flex; flex-direction: column; gap: 12px;}
+
+.sensor-panel, .map-panel{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:14px}
+.map-wrap {border: 1px solid var(--border); border-radius: 4px; overflow: hidden; height: 350px; position: relative;}
+#lagosMap {height: 100%; width: 100%;}
+.map-controls { position: absolute; top: 10px; right: 10px; z-index: 1000; background: rgba(3, 20, 40, 0.9); padding: 8px; border: 1px solid var(--cyan); border-radius: 4px; font-size: 11px; color: var(--cyan); display: flex; flex-direction: column; gap: 4px;}
+
+.panel-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid var(--border)}
+.panel-title{font-size:13px;letter-spacing:3px;text-transform:uppercase;color:var(--cyan);font-weight:600}
+.panel-badge{font-size:10px;letter-spacing:1.5px;color:var(--ink3);background:var(--bg4);padding:3px 8px;border-radius:4px;border:1px solid var(--border)}
+
+/* ENHANCED FILTER PANEL */
+.filter-panel {background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:14px;}
+.filter-row {display: flex; gap: 8px; margin-bottom: 8px;}
+.filter-input {flex: 1; padding: 6px; background: var(--bg); color: var(--cyan); border: 1px solid var(--border); border-radius: 4px; font-family: 'Share Tech Mono', monospace; font-size: 11px; outline: none;}
+.filter-input:focus {border-color: var(--cyan);}
+.filter-btn {flex: 1; padding: 6px; background: rgba(0,210,255,0.1); color: var(--cyan); border: 1px solid var(--cyan); border-radius: 4px; font-family: 'Barlow Condensed', sans-serif; font-weight: 700; cursor: pointer; text-transform: uppercase; transition: 0.3s;}
+.filter-btn:hover {background: var(--cyan); color: var(--bg);}
+.filter-btn.export {border-color: var(--blue); color: var(--blue); background: rgba(77,166,255,0.1);}
+.filter-btn.export:hover {background: var(--blue); color: var(--bg);}
+
+/* NEW HARDWARE DIAGNOSTICS PANEL */
+.diagnostics-panel {background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:14px; flex: 1;}
+.diag-row {display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; font-size: 11px;}
+.diag-lbl {color: var(--ink3); text-transform: uppercase; letter-spacing: 1px; width: 60px;}
+.diag-bar-wrap {flex: 1; margin: 0 10px; height: 4px; background: var(--bg3); border-radius: 2px; overflow: hidden;}
+.diag-val {font-family: 'Share Tech Mono', monospace; color: var(--cyan); width: 45px; text-align: right;}
+
+/* HIGH LEGIBILITY TELEMETRY TABLE */
+.station-table{width:100%;border-collapse:collapse;margin-top:4px}
+.station-table th{font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--cyan);text-align:left;padding:8px;border-bottom:2px solid var(--border);background:rgba(0,210,255,0.02)}
+.station-table td{font-family:'Share Tech Mono',monospace;font-size:13px;padding:9px 8px;border-bottom:1px solid rgba(0,210,255,0.1);transition:background 0.2s}
+.station-table tr:hover td{background:rgba(0,210,255,0.05)}
+.station-name{font-family:'Barlow Condensed',sans-serif;font-size:13px;font-weight:600;letter-spacing:0.5px;text-transform:uppercase;color:var(--ink)}
+.status-ok{color:var(--green);font-weight:bold}
+.status-warn{color:var(--amber);font-weight:bold}
+.status-crit{color:var(--red);font-weight:bold}
+.mini-bar{height:5px;background:var(--bg3);border-radius:2px;position:relative;overflow:hidden;border:1px solid rgba(0,210,255,0.1)}
+.mini-bar-fill{height:100%;border-radius:2px;transition:width 0.8s ease}
+
+.radar-panel{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:14px;display:flex;flex-direction:column}
+.radar-wrap{position:relative;width:100%;aspect-ratio:1;max-height:260px;display:flex;align-items:center;justify-content:center}
+.radar-svg{width:100%;height:100%}
+
+.tide-indicator{display:flex;align-items:center;gap:10px;margin-top:8px}
+.tide-wave{flex:1;height:36px;position:relative;overflow:hidden}
+.wave-svg{position:absolute;top:0;left:0;width:200%;height:100%;animation:waveScroll 3s linear infinite}
+@keyframes waveScroll{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+
+/* UNIFIED BOTTOM LAYOUT */
+.bottom-section-wrapper {display: grid; grid-template-columns: 1fr 320px; gap: 12px; margin-top: 4px;}
+.quad-chart-grid {display: grid; grid-template-columns: 1fr 1fr; gap: 12px;}
+.chart-panel{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:14px}
+.chart-canvas-wrap{position:relative;width:100%;height:150px}
+
+.sidebar-right-wrap {display: flex; flex-direction: column; gap: 12px;}
+.profile-card {background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 14px;}
+.profile-header {display: flex; align-items: center; gap: 10px; padding-bottom: 8px; border-bottom: 1px solid var(--border); margin-bottom: 8px;}
+.profile-avatar {width: 32px; height: 32px; border-radius: 4px; border: 1px solid var(--cyan); background: rgba(0,210,255,0.1); display: flex; align-items: center; justify-content: center; font-weight: bold; color: var(--cyan); font-size: 11px;}
+.profile-meta {display: flex; flex-direction: column;}
+.profile-name {font-size: 13px; font-weight: 600; color: var(--ink); text-transform: uppercase; letter-spacing: 1px;}
+.profile-role {font-size: 9px; color: var(--cyan); letter-spacing: 1px; font-family: 'Share Tech Mono', monospace;}
+.profile-stat-row {display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 4px; padding: 2px 0;}
+.profile-stat-lbl {color: var(--ink3); text-transform: uppercase;}
+.profile-stat-val {font-family: 'Share Tech Mono', monospace; color: var(--cyan);}
+
+.alert-feed{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:14px; flex: 1; min-height: 200px; overflow-y: auto;}
+.alert-item{display:flex;align-items:flex-start;gap:10px;padding:7px 0;border-bottom:1px solid var(--border);font-size:12px}
+.alert-item:last-child{border-bottom:none}
+.alert-dot{width:6px;height:6px;border-radius:50%;margin-top:3px;flex-shrink:0}
+.alert-time{font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--ink3);min-width:50px}
+.alert-msg{color:var(--ink2);line-height:1.4}
+</style>
+</head>
+<body>
+
+<h2 class="sr-only" style="display:none;">Omi Eko Marine Monitoring Dashboard</h2>
+<div class="dashboard">
+
+<div class="topbar">
+  <div class="topbar-left">
+    <div class="logo-mark">
+      <div class="sonar-ring"></div><div class="sonar-ring"></div><div class="sonar-ring"></div>
+    </div>
+    <div>
+      <div class="brand">Omi Eko <span>/ LAGOON COMMAND</span></div>
+      <div class="system-label">Lagos Marine Environmental Monitoring System · v2.4.2</div>
+    </div>
+  </div>
+  <div class="status-row">
+    <div class="status-pill"><div class="pulse-dot"></div><span id="sys-mode">LIVE OPERATIONS</span></div>
+    <div class="status-pill"><div class="pulse-dot warn"></div><span id="top-alert-count">0 ALERTS ACTIVE</span></div>
+    <div class="clock" id="clock">--:--:--</div>
+    <div class="coords mono" style="font-size:11px;color:var(--ink3)">6.4498°N · 3.3985°E</div>
+  </div>
+</div>
+
+<div class="kpi-grid">
+  <div class="kpi-card" style="--kpi-accent:var(--cyan)">
+    <div class="kpi-label">Avg Water Temp</div>
+    <div class="kpi-value" id="kpi-temp">--</div>
+    <div class="kpi-unit">°C CELSIUS</div>
+    <svg class="kpi-sparkline" id="spark-temp"></svg>
+  </div>
+  <div class="kpi-card" style="--kpi-accent:#4da6ff">
+    <div class="kpi-label">Avg Dissolved O₂</div>
+    <div class="kpi-value" id="kpi-do">--</div>
+    <div class="kpi-unit">mg/L COMPLIANT</div>
+    <svg class="kpi-sparkline" id="spark-do"></svg>
+  </div>
+  <div class="kpi-card" style="--kpi-accent:#b8e0d2">
+    <div class="kpi-label">Avg Salinity</div>
+    <div class="kpi-value" id="kpi-sal">--</div>
+    <div class="kpi-unit">PPT ESTUARY INDEX</div>
+    <svg class="kpi-sparkline" id="spark-sal"></svg>
+  </div>
+  <div class="kpi-card" style="--kpi-accent:var(--amber)">
+    <div class="kpi-label">Avg Turbidity</div>
+    <div class="kpi-value" id="kpi-turb">--</div>
+    <div class="kpi-unit">NTU SEDIMENTATION</div>
+    <svg class="kpi-sparkline" id="spark-turb"></svg>
+  </div>
+  <div class="kpi-card" style="--kpi-accent:var(--green)">
+    <div class="kpi-label">Water Quality Index</div>
+    <div class="kpi-value" id="kpi-wqi">--</div>
+    <div class="kpi-unit">WQI OVERALL SCORE</div>
+    <svg class="kpi-sparkline" id="spark-wqi"></svg>
+  </div>
+  <div class="kpi-card" style="--kpi-accent:var(--purple)">
+    <div class="kpi-label">Max Current Speed</div>
+    <div class="kpi-value" id="kpi-speed">--</div>
+    <div class="kpi-unit">m/s VECTOR</div>
+    <svg class="kpi-sparkline" id="spark-speed"></svg>
+  </div>
+  <div class="kpi-card" style="--kpi-accent:#ff4da6">
+    <div class="kpi-label">Thermal Variance</div>
+    <div class="kpi-value" id="kpi-thermalvar">--</div>
+    <div class="kpi-unit">°C REEF SPREAD</div>
+  </div>
+  <div class="kpi-card" style="--kpi-accent:#80ffcc">
+    <div class="kpi-label">Salinity Gradient</div>
+    <div class="kpi-value" id="kpi-salgrad">--</div>
+    <div class="kpi-unit">PPT STRATIFICATION</div>
+  </div>
+</div>
+
+<div class="kpi-grid">
+  <div class="kpi-card" style="--kpi-accent:#00e8c8">
+    <div class="kpi-label">Tidal Phase</div>
+    <div class="kpi-value" id="kpi-tide">--</div>
+    <div class="kpi-unit">△ DEPTH: <span id="kpi-depth">--</span>m</div>
+  </div>
+  <div class="kpi-card" style="--kpi-accent:#ff7c4d">
+    <div class="kpi-label">Pollution Load</div>
+    <div class="kpi-value" id="kpi-poll">COMPUTING</div>
+    <div class="kpi-unit">COMPOSITE POLLUTION RATIO</div>
+  </div>
+  <div class="kpi-card" style="--kpi-accent:#4da6ff">
+    <div class="kpi-label">Active Nodes</div>
+    <div class="kpi-value" id="kpi-nodes">6 / 6</div>
+    <div class="kpi-unit">TELEMETRY SYSTEM ONLINE</div>
+  </div>
+  <div class="kpi-card" style="--kpi-accent:#f0ff4d">
+    <div class="kpi-label">Data Gateway</div>
+    <div class="kpi-value" id="kpi-datarate">LIVE</div>
+    <div class="kpi-unit">SUPABASE REST ENGINE</div>
+  </div>
+  <div class="kpi-card" style="--kpi-accent:#00d2ff">
+    <div class="kpi-label">Forecast Wave Hgt</div>
+    <div class="kpi-value" id="kpi-ext-wave">--</div>
+    <div class="kpi-unit">METERS (STORMGLASS)</div>
+  </div>
+  <div class="kpi-card" style="--kpi-accent:var(--amber)">
+    <div class="kpi-label">Forecast Wind Vel</div>
+    <div class="kpi-value" id="kpi-ext-wind">--</div>
+    <div class="kpi-unit">M/S VECTOR ENGINE</div>
+  </div>
+  <div class="kpi-card" style="--kpi-accent:var(--red)">
+    <div class="kpi-label">Precipitation Rate</div>
+    <div class="kpi-value" id="kpi-ext-rain">--</div>
+    <div class="kpi-unit">MM/HR INFLOW RISK</div>
+  </div>
+  <div class="kpi-card" style="--kpi-accent:var(--green)">
+    <div class="kpi-label">Safety Margin</div>
+    <div class="kpi-value" id="kpi-safety-index">94%</div>
+    <div class="kpi-unit">OPERATIONAL WINDOW</div>
+  </div>
+</div>
+
+<div class="main-grid">
+  <div class="left-column">
+    <div class="map-panel">
+        <div class="panel-header">
+            <div class="panel-title">Spatial Plume Tracking</div>
+            <div class="panel-badge">SENTINEL-2 COPERNICUS CORE</div>
+        </div>
+        <div class="map-wrap">
+            <div class="map-controls">
+                <label style="cursor: pointer;"><input type="checkbox" id="toggleHeatmap" checked> Turbidity Heatmap</label>
+                <label style="cursor: pointer; color: #ffaa00; font-weight: 600;"><input type="checkbox" id="toggleSatellite" checked> Sentinel-2 Plumes</label>
+            </div>
+            <div id="lagosMap"></div>
+        </div>
+    </div>
+
+    <div class="sensor-panel">
+        <div class="panel-header">
+          <div class="panel-title">Station Telemetry Grid</div>
+          <div style="display:flex;gap:8px;align-items:center">
+              <div class="panel-badge" style="color:var(--cyan)">REAL-TIME COMPILATION</div>
+              <div class="panel-badge" id="last-update">LAST: --:--:--</div>
+          </div>
+        </div>
+        <table class="station-table">
+        <thead>
+            <tr>
+            <th>STATION DATA HUB</th>
+            <th>TEMP °C</th>
+            <th>DO MG/L</th>
+            <th>TURB NTU</th>
+            <th>SAL PPT</th>
+            <th>DEPTH M</th>
+            <th>VEL M/S</th>
+            <th>HEADING</th>
+            <th>WQI</th>
+            <th>STATUS</th>
+            </tr>
+        </thead>
+        <tbody id="station-tbody"></tbody>
+        </table>
+    </div>
+  </div>
+
+  <div class="right-column">
+      <div class="radar-panel">
+        <div class="panel-header">
+          <div class="panel-title">Station Radar</div>
+          <div class="panel-badge">SPATIAL SWEEP</div>
+        </div>
+        <div class="radar-wrap">
+          <svg class="radar-svg" viewBox="0 0 260 260" id="radar-svg">
+            <defs>
+              <radialGradient id="radarGrad" cx="50%" cy="50%" r="50%">
+                <stop offset="0%" stop-color="#00d2ff" stop-opacity="0.08"/>
+                <stop offset="100%" stop-color="#00d2ff" stop-opacity="0"/>
+              </radialGradient>
+            </defs>
+            <circle cx="130" cy="130" r="120" fill="url(#radarGrad)" stroke="rgba(0,210,255,0.12)" stroke-width="1"/>
+            <circle cx="130" cy="130" r="90" fill="none" stroke="rgba(0,210,255,0.1)" stroke-width="0.5"/>
+            <circle cx="130" cy="130" r="60" fill="none" stroke="rgba(0,210,255,0.1)" stroke-width="0.5"/>
+            <circle cx="130" cy="130" r="30" fill="none" stroke="rgba(0,210,255,0.15)" stroke-width="0.5"/>
+            <line x1="10" y1="130" x2="250" y2="130" stroke="rgba(0,210,255,0.08)" stroke-width="0.5"/>
+            <line x1="130" y1="10" x2="130" y2="250" stroke="rgba(0,210,255,0.08)" stroke-width="0.5"/>
+            <path id="radar-sweep" d="" fill="rgba(0,210,255,0.06)" stroke="none"/>
+            <line id="radar-line" x1="130" y1="130" x2="250" y2="130" stroke="rgba(0,210,255,0.5)" stroke-width="1"/>
+            <g id="radar-stations"></g>
+            <circle cx="130" cy="130" r="4" fill="var(--cyan)" opacity="0.8"/>
+          </svg>
+        </div>
+        <div style="margin-top:8px; width: 100%;">
+          <div class="tide-indicator">
+            <div style="font-size:10px;letter-spacing:2px;color:var(--ink3);text-transform:uppercase;width:60px">Tidal<br>Wave</div>
+            <div class="tide-wave" id="tide-wave-container">
+              <svg class="wave-svg" viewBox="0 0 400 36" preserveAspectRatio="none" id="wave-svg">
+                <path d="M0,18 C25,6 50,30 75,18 C100,6 125,30 150,18 C175,6 200,30 225,18 C250,6 275,30 300,18 C325,6 350,30 375,18 C400,6 425,30 450,18 C475,6 500,30 525,18 C550,6 575,30 600,18" fill="none" stroke="var(--cyan)" stroke-width="1.5" opacity="0.6"/>
+                <path d="M0,22 C30,10 60,34 90,22 C120,10 150,34 180,22 C210,10 240,34 270,22 C300,10 330,34 360,22 C390,10 420,34 450,22 C480,10 510,34 540,22 C570,10 600,34 630,22" fill="none" stroke="var(--cyan2)" stroke-width="1" opacity="0.4"/>
+              </svg>
+            </div>
+            <div style="font-size:11px;font-family:'Share Tech Mono';color:var(--cyan)" id="tide-label-bottom">EBB</div>
+          </div>
+        </div>
+      </div>
+      
+      <div class="filter-panel">
+        <div class="panel-header" style="margin-bottom: 8px;">
+            <div class="panel-title">Database Filters</div>
+            <div class="panel-badge">QUERY ENGINE</div>
+        </div>
+        <div class="filter-row">
+            <select id="station-filter" class="filter-input" title="Filter by Node">
+                <option value="ALL">All Stations / Grid View</option>
+                <option value="SENS-LAG-01">SENS-LAG-01 - Admiralty Way</option>
+                <option value="SENS-LAG-02">SENS-LAG-02 - Eko Atlantic</option>
+                <option value="SENS-LAG-03">SENS-LAG-03 - Ebute Metta</option>
+                <option value="SENS-LAG-04">SENS-LAG-04 - Banana Island</option>
+                <option value="SENS-LAG-05">SENS-LAG-05 - Lekki Peninsula</option>
+                <option value="SENS-LAG-06">SENS-LAG-06 - Lagos Island</option>
+            </select>
+        </div>
+        <div class="filter-row">
+            <input type="date" id="hist-date" class="filter-input" title="Select Date">
+        </div>
+        <div class="filter-row">
+            <input type="time" id="hist-start" class="filter-input" title="Start Time">
+            <input type="time" id="hist-end" class="filter-input" title="End Time">
+        </div>
+        <div class="filter-row" style="margin-top: 10px;">
+            <button class="filter-btn" onclick="applyFilters()">Execute Query</button>
+            <button class="filter-btn" style="border-color: var(--amber); color: var(--amber); background: rgba(245,166,35,0.1);" onclick="resetFilters()">Reset</button>
+        </div>
+        <div class="filter-row">
+            <button class="filter-btn export" onclick="exportCSV()">Export CSV</button>
+        </div>
+      </div>
+
+      <div class="diagnostics-panel">
+        <div class="panel-header">
+            <div class="panel-title">Hardware Status</div>
+            <div class="panel-badge">IOT MESH</div>
+        </div>
+        <div class="diag-row">
+            <span class="diag-lbl">PWR/BAT</span>
+            <div class="diag-bar-wrap"><div class="mini-bar-fill" id="diag-bat" style="width:94%;background:var(--green)"></div></div>
+            <span class="diag-val" id="diag-bat-txt">94%</span>
+        </div>
+        <div class="diag-row">
+            <span class="diag-lbl">SIG/DBM</span>
+            <div class="diag-bar-wrap"><div class="mini-bar-fill" id="diag-sig" style="width:82%;background:var(--cyan)"></div></div>
+            <span class="diag-val" id="diag-sig-txt">-68 dBm</span>
+        </div>
+        <div class="diag-row">
+            <span class="diag-lbl">LATENCY</span>
+            <div class="diag-bar-wrap"><div class="mini-bar-fill" id="diag-ping" style="width:15%;background:var(--blue)"></div></div>
+            <span class="diag-val" id="diag-ping-txt">42ms</span>
+        </div>
+      </div>
+
+  </div>
+</div>
+
+<div class="bottom-section-wrapper">
+  
+  <div class="quad-chart-grid">
+    <div class="chart-panel">
+      <div class="panel-header">
+        <div class="panel-title">DO vs Turbidity</div>
+        <div class="panel-badge">LIVE OBSERVATION</div>
+      </div>
+      <div class="chart-canvas-wrap"><canvas id="chart-do-turb"></canvas></div>
+    </div>
+
+    <div class="chart-panel">
+      <div class="panel-header">
+        <div class="panel-title">Tide Elevation: Live vs Forecast</div>
+        <div class="panel-badge">DEVIATION MATRIX</div>
+      </div>
+      <div class="chart-canvas-wrap"><canvas id="chart-compare"></canvas></div>
+    </div>
+
+    <div class="chart-panel">
+      <div class="panel-header">
+        <div class="panel-title">Wind Velocity Trend</div>
+        <div class="panel-badge">STORMGLASS DATA ENGINE</div>
+      </div>
+      <div class="chart-canvas-wrap"><canvas id="chart-wind-trends"></canvas></div>
+    </div>
+
+    <div class="chart-panel">
+      <div class="panel-header">
+        <div class="panel-title">Environmental Volatility Risk</div>
+        <div class="panel-badge">COMPOSITE RISK CURVE</div>
+      </div>
+      <div class="chart-canvas-wrap"><canvas id="chart-environmental-risk"></canvas></div>
+    </div>
+  </div>
+
+  <div class="sidebar-right-wrap">
+    <div class="profile-card">
+      <div class="profile-header">
+        <div class="profile-avatar">CMD</div>
+        <div class="profile-meta">
+          <div class="profile-name">Agency Command Console</div>
+          <div class="profile-role">Spatial Administration Node</div>
+        </div>
+      </div>
+      <div class="profile-stat-row">
+        <span class="profile-stat-lbl">Active Watch</span>
+        <span class="profile-stat-val">Lagos Lagoon Channel</span>
+      </div>
+      <div class="profile-stat-row">
+        <span class="profile-stat-lbl">Network State</span>
+        <span class="profile-stat-val" style="color:var(--green)">SECURE CONNECTION</span>
+      </div>
+      <div class="profile-stat-row">
+        <span class="profile-stat-lbl">Monitored Target</span>
+        <span class="profile-stat-val" id="profile-target">ALL BUOYS (140km)</span>
+      </div>
+    </div>
+
+    <div class="alert-feed">
+      <div class="panel-header">
+        <div class="panel-title">Alert Feed</div>
+        <div class="panel-badge" id="alert-count">0 ACTIVE</div>
+      </div>
+      <div id="alert-list"></div>
+    </div>
+  </div>
+
+</div>
+
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script>
+// --- SUPABASE CONFIG ---
+const SUPABASE_URL="https://wwmlcreroanokrmekmpe.supabase.co";
+const SUPABASE_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind3bWxjcmVyb2Fub2tybWVrbXBlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk0NjQ2OTksImV4cCI6MjA5NTA0MDY5OX0.WussxoM38CmBL5xMnbRxbE9AI6igk05aDqISQoJZ984";
+
+const STATIONS=[
+  {id:"SENS-LAG-01",name:"Admiralty Way",lat:6.442504,lon:3.452724},
+  {id:"SENS-LAG-02",name:"Eko Atlantic",lat:6.403575,lon:3.400164},
+  {id:"SENS-LAG-03",name:"Ebute Metta",lat:6.479943,lon:3.394522},
+  {id:"SENS-LAG-04",name:"Banana Island",lat:6.456747,lon:3.457205},
+  {id:"SENS-LAG-05",name:"Lekki Peninsula",lat:6.453041,lon:3.466866},
+  {id:"SENS-LAG-06",name:"Lagos Island",lat:6.449087,lon:3.379521}
+];
+const SHORT_NAMES=["Admiralty","Eko Atl.","Ebute","Banana I.","Lekki","Lagos I."];
+
+let liveData={};
+let globalFetchedData=[]; 
+let sparkHistory={temp:[],do:[],sal:[],turb:[],wqi:[],speed:[]};
+let chartDOTurb=null, chartCompare=null, chartWind=null, chartRisk=null;
+let radarAngle=0;
+let fetchInterval;
+let satFetchInterval;
+
+// --- MAP INIT ---
+const map = L.map('lagosMap').setView([6.441, 3.423], 12);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(map);
+let markers = {}; let plumeLines = {}; 
+let heatLayer = L.heatLayer([], {radius: 25, blur: 15, maxZoom: 12, max: 70}).addTo(map);
+let satelliteLayer = L.layerGroup().addTo(map);
+
+document.getElementById('toggleHeatmap').addEventListener('change', function() {
+    if(this.checked) map.addLayer(heatLayer); else map.removeLayer(heatLayer);
+});
+
+document.getElementById('toggleSatellite').addEventListener('change', function() {
+    if(this.checked) map.addLayer(satelliteLayer); else map.removeLayer(satelliteLayer);
+});
+
+// --- UI UTILS ---
+function calcWQI(d){
+  let doScore=Math.min(100,(d.dissolved_oxygen_mgl/8)*100);
+  let turbScore=Math.max(0,100-d.turbidity_ntu*1.5);
+  let tempScore=d.temperature_c<32?100:Math.max(0,100-(d.temperature_c-32)*10);
+  let salScore=d.salinity_ppt>35?50:100;
+  return Math.round((doScore*0.4+turbScore*0.35+tempScore*0.15+salScore*0.1));
+}
+
+function statusClass(d){
+  let wqi=calcWQI(d);
+  if(wqi<40)return"status-crit";
+  if(wqi<65)return"status-warn";
+  return"status-ok";
+}
+
+function statusText(d){
+  let wqi=calcWQI(d);
+  if(wqi<40)return"CRITICAL";
+  if(wqi<65)return"CAUTION";
+  return"NOMINAL";
+}
+
+function updateClock(){
+  const now=new Date();
+  document.getElementById("clock").textContent=now.toTimeString().slice(0,8);
+}
+
+function updateSparkline(svgId,vals,color){
+  const svg=document.getElementById(svgId);
+  if(!svg||vals.length<2)return;
+  const w=svg.getBoundingClientRect().width||100;const h=18;
+  const mn=Math.min(...vals),mx=Math.max(...vals);
+  const range=mx-mn||1;
+  const pts=vals.map((v,i)=>`${(i/(vals.length-1))*w},${h-((v-mn)/range)*(h-2)-1}`).join(" ");
+  svg.innerHTML=`<polyline points="${pts}" fill="none" stroke="${color}" stroke-width="1.2" opacity="0.8"/>`;
+}
+
+function pushSpark(key,val){
+  sparkHistory[key].push(val);
+  if(sparkHistory[key].length>20)sparkHistory[key].shift();
+}
+
+function updateHardwareDiagnostics() {
+    // Adds a slight jitter to hardware stats to make them look alive
+    let bat = 94 + (Math.random() * 2 - 1);
+    let sig = -68 + (Math.random() * 4 - 2);
+    let ping = 42 + (Math.random() * 10 - 5);
+    
+    document.getElementById('diag-bat').style.width = bat + "%";
+    document.getElementById('diag-bat-txt').textContent = Math.round(bat) + "%";
+    
+    document.getElementById('diag-sig-txt').textContent = Math.round(sig) + " dBm";
+    
+    document.getElementById('diag-ping').style.width = (ping/100)*100 + "%"; // Visual scale 0-100ms
+    document.getElementById('diag-ping-txt').textContent = Math.round(ping) + "ms";
+}
+
+function renderTable(data){
+  const tbody=document.getElementById("station-tbody");
+  if(!tbody)return;
+  tbody.innerHTML="";
+  STATIONS.forEach(st=>{
+    const d=data[st.id];
+    if(!d)return; // If filtered, this naturally skips unselected stations!
+    
+    const wqi=calcWQI(d);
+    const sc=statusClass(d);
+    const turbPct=Math.min(100,(d.turbidity_ntu/100)*100);
+    const tr=document.createElement("tr");
+    tr.innerHTML=`
+      <td><span class="station-name">${st.name.replace(" ","&nbsp;")}</span><br><span class="mono" style="font-size:9px;color:var(--ink3)">${st.id}</span></td>
+      <td style="color:${d.temperature_c>30?"var(--amber)":"var(--cyan)"}">${d.temperature_c.toFixed(1)}</td>
+      <td style="color:${d.dissolved_oxygen_mgl<4?"var(--red)":d.dissolved_oxygen_mgl<5?"var(--amber)":"var(--green)"}">${d.dissolved_oxygen_mgl.toFixed(2)}</td>
+      <td>
+        <div style="display:flex;align-items:center;gap:6px">
+          <span style="color:${d.turbidity_ntu>50?"var(--red)":d.turbidity_ntu>30?"var(--amber)":"var(--ink)"};min-width:30px;display:inline-block">${d.turbidity_ntu.toFixed(1)}</span>
+          <div class="mini-bar" style="width:60px;"><div class="mini-bar-fill" style="width:${turbPct}%;background:${d.turbidity_ntu>50?"var(--red)":d.turbidity_ntu>30?"var(--amber)":"var(--cyan)"}"></div></div>
+        </div>
+      </td>
+      <td style="color:var(--ink2)">${d.salinity_ppt.toFixed(1)}</td>
+      <td style="color:var(--blue)">${d.water_depth_meters.toFixed(2)}</td>
+      <td style="color:${d.current_speed_ms>1?"var(--amber)":"var(--ink2)"}">${d.current_speed_ms.toFixed(2)}</td>
+      <td style="color:var(--ink3)">${d.current_direction_deg.toFixed(0)}°</td>
+      <td>
+        <div style="display:flex;align-items:center;gap:6px">
+          <span class="${sc}" style="min-width:20px;display:inline-block">${wqi}</span>
+          <div class="mini-bar" style="width:40px;"><div class="mini-bar-fill" style="width:${wqi}%;background:${wqi<40?"var(--red)":wqi<65?"var(--amber)":"var(--green)"}"></div></div>
+        </div>
+      </td>
+      <td><span class="${sc}" style="font-size:11px;letter-spacing:0.5px">${statusText(d)}</span></td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function updateKPIs(data){
+  const vals=Object.values(data);
+  if(!vals.length)return;
+  
+  // Update Node Count based on active filter
+  document.getElementById("kpi-nodes").textContent = `${vals.length} / 6`;
+  
+  const avgTemp=vals.reduce((s,d)=>s+d.temperature_c,0)/vals.length;
+  const avgDO=vals.reduce((s,d)=>s+d.dissolved_oxygen_mgl,0)/vals.length;
+  const avgSal=vals.reduce((s,d)=>s+d.salinity_ppt,0)/vals.length;
+  const avgTurb=vals.reduce((s,d)=>s+d.turbidity_ntu,0)/vals.length;
+  const avgWQI=vals.reduce((s,d)=>s+calcWQI(d),0)/vals.length;
+  const maxSpeed=Math.max(...vals.map(d=>d.current_speed_ms));
+  const avgDepth=vals.reduce((s,d)=>s+d.water_depth_meters,0)/vals.length;
+  const minTemp=Math.min(...vals.map(d=>d.temperature_c));
+  const maxTemp=Math.max(...vals.map(d=>d.temperature_c));
+  const minSal=Math.min(...vals.map(d=>d.salinity_ppt));
+  const maxSal=Math.max(...vals.map(d=>d.salinity_ppt));
+
+  document.getElementById("kpi-temp").textContent=avgTemp.toFixed(1);
+  document.getElementById("kpi-do").textContent=avgDO.toFixed(2);
+  document.getElementById("kpi-sal").textContent=avgSal.toFixed(1);
+  document.getElementById("kpi-turb").textContent=avgTurb.toFixed(1);
+  document.getElementById("kpi-wqi").textContent=Math.round(avgWQI);
+  document.getElementById("kpi-speed").textContent=maxSpeed.toFixed(2);
+  document.getElementById("kpi-depth").textContent=avgDepth.toFixed(1);
+  document.getElementById("kpi-thermalvar").textContent=(maxTemp-minTemp).toFixed(1);
+  document.getElementById("kpi-salgrad").textContent=(maxSal-minSal).toFixed(1);
+
+  if(avgTurb>40){document.getElementById("kpi-poll").textContent="HIGH";document.getElementById("kpi-poll").style.color="var(--red)"}
+  else if(avgTurb>25){document.getElementById("kpi-poll").textContent="MODERATE";document.getElementById("kpi-poll").style.color="var(--amber)"}
+  else{document.getElementById("kpi-poll").textContent="LOW";document.getElementById("kpi-poll").style.color="var(--green)"}
+
+  pushSpark("temp",avgTemp);pushSpark("do",avgDO);pushSpark("sal",avgSal);
+  pushSpark("turb",avgTurb);pushSpark("wqi",avgWQI);pushSpark("speed",maxSpeed);
+  updateSparkline("spark-temp",sparkHistory.temp,"#00d2ff");
+  updateSparkline("spark-do",sparkHistory.do,"#4da6ff");
+  updateSparkline("spark-sal",sparkHistory.sal,"#b8e0d2");
+  updateSparkline("spark-turb",sparkHistory.turb,"#f5a623");
+  updateSparkline("spark-wqi",sparkHistory.wqi,"#00e87a");
+  updateSparkline("spark-speed",sparkHistory.speed,"#d08aff");
+}
+
+function updateAlerts(data){
+  const newAlerts=[];
+  const now=new Date().toTimeString().slice(0,8);
+  Object.entries(data).forEach(([id,d])=>{
+    const st=STATIONS.find(s=>s.id===id);
+    if(!st)return;
+    if(d.dissolved_oxygen_mgl<4)newAlerts.push({level:"crit",time:now,msg:`${st.name}: Low DO (${d.dissolved_oxygen_mgl.toFixed(2)} mg/L)`});
+    if(d.turbidity_ntu>50)newAlerts.push({level:"warn",time:now,msg:`${st.name}: High turbidity (${d.turbidity_ntu.toFixed(1)} NTU)`});
+    if(d.temperature_c>31)newAlerts.push({level:"warn",time:now,msg:`${st.name}: Elevated temp (${d.temperature_c.toFixed(1)}°C)`});
+  });
+  if(newAlerts.length===0)newAlerts.push({level:"ok",time:now,msg:"All parameters within acceptable thresholds"});
+  
+  document.getElementById("top-alert-count").textContent=`${newAlerts.filter(a=>a.level!=="ok").length} ALERTS ACTIVE`;
+  document.getElementById("alert-count").textContent=`${newAlerts.filter(a=>a.level!=="ok").length} ACTIVE`;
+  
+  const list=document.getElementById("alert-list");
+  list.innerHTML="";
+  newAlerts.slice(0,6).forEach(a=>{
+    const color=a.level==="crit"?"var(--red)":a.level==="warn"?"var(--amber)":"var(--green)";
+    const div=document.createElement("div");
+    div.className="alert-item";
+    div.innerHTML=`<div class="alert-dot" style="background:${color}"></div><div class="alert-time">${a.time}</div><div class="alert-msg">${a.msg}</div>`;
+    list.appendChild(div);
+  });
+}
+
+function updateRadar(data){
+  const minLat=6.39,maxLat=6.49,minLon=3.36,maxLon=3.48;
+  const svg=document.getElementById("radar-stations");
+  if(!svg)return;
+  svg.innerHTML="";
+  STATIONS.forEach((st,i)=>{
+    const d=data[st.id];
+    if(!d)return; // Hides unfiltered stations from radar
+    const wqi=calcWQI(d);
+    const x=20+((st.lon-minLon)/(maxLon-minLon))*220;
+    const y=240-((st.lat-minLat)/(maxLat-minLat))*220;
+    const col=wqi<40?"#ff4d4d":wqi<65?"#f5a623":"#00d2ff";
+    const g=document.createElementNS("http://www.w3.org/2000/svg","g");
+    g.innerHTML=`
+      <circle cx="${x}" cy="${y}" r="8" fill="${col}" opacity="0.2"/>
+      <circle cx="${x}" cy="${y}" r="4" fill="${col}" opacity="0.9"/>
+      <circle cx="${x}" cy="${y}" r="8" fill="none" stroke="${col}" stroke-width="0.5" opacity="0.4"/>
+      <text x="${x+7}" y="${y+3}" font-size="7" fill="${col}" opacity="0.9" font-family="Share Tech Mono">${SHORT_NAMES[i]}</text>
+    `;
+    svg.appendChild(g);
+  });
+}
+
+function updateSpatialMap(data){
+  const heatArr = [];
+  
+  // Clear old markers if filtering
+  for (let id in markers) {
+      if(!data[id]) {
+          map.removeLayer(markers[id]);
+          delete markers[id];
+          if(plumeLines[id]) { map.removeLayer(plumeLines[id]); delete plumeLines[id]; }
+      }
+  }
+
+  STATIONS.forEach((st)=>{
+    const d = data[st.id];
+    if(!d) return; // Hides unfiltered stations from map
+    heatArr.push([st.lat, st.lon, d.turbidity_ntu]);
+    
+    const col = d.turbidity_ntu > 50 ? '#ff4d4d' : '#00d2ff'; 
+    if(markers[st.id]) {
+        markers[st.id].setLatLng([st.lat, st.lon]).setStyle({color: col});
+    } else {
+        markers[st.id] = L.circleMarker([st.lat, st.lon], {radius: 6, color: col, fillOpacity: 0.8}).addTo(map).bindPopup(`<b>${st.name}</b>`);
+    }
+
+    if(d.turbidity_ntu > 50) {
+        const dist = d.current_speed_ms * 3600;
+        const endLat = st.lat + ((dist * Math.cos(d.current_direction_deg * Math.PI / 180)) / 111111);
+        const endLon = st.lon + ((dist * Math.sin(d.current_direction_deg * Math.PI / 180)) / (111111 * Math.cos(st.lat * Math.PI / 180)));
+        if(plumeLines[st.id]) { plumeLines[st.id].setLatLngs([[st.lat, st.lon], [endLat, endLon]]); } 
+        else { plumeLines[st.id] = L.polyline([[st.lat, st.lon], [endLat, endLon]], { color: '#ff4d4d', weight: 2, dashArray: '5, 8' }).addTo(map); }
+    } else {
+        if(plumeLines[st.id]) { map.removeLayer(plumeLines[st.id]); delete plumeLines[st.id]; }
+    }
+  });
+  heatLayer.setLatLngs(heatArr);
+}
+
+function animateRadar(){
+  radarAngle=(radarAngle+2)%360;
+  const rad=radarAngle*Math.PI/180;
+  const cx=130,cy=130,r=120;
+  const x2=cx+r*Math.cos(rad);
+  const y2=cy+r*Math.sin(rad);
+  const sweepRad=(radarAngle-30)*Math.PI/180;
+  const sx=cx+r*Math.cos(sweepRad);
+  const sy=cy+r*Math.sin(sweepRad);
+  const line=document.getElementById("radar-line");
+  const sweep=document.getElementById("radar-sweep");
+  if(line){line.setAttribute("x2",x2);line.setAttribute("y2",y2);}
+  if(sweep){sweep.setAttribute("d",`M${cx},${cy} L${sx},${sy} A${r},${r} 0 0,1 ${x2},${y2} Z`);}
+  requestAnimationFrame(()=>setTimeout(animateRadar,30));
+}
+
+function buildCharts(data){
+  // Only build labels for stations that are currently in the data object (respects filter)
+  const activeStations = STATIONS.filter(s => data[s.id]);
+  const labels=activeStations.map(s => s.name.replace("Island", "I.").replace("Peninsula", "Pen."));
+  
+  const doVals=activeStations.map(s=>+data[s.id].dissolved_oxygen_mgl.toFixed(2));
+  const turbVals=activeStations.map(s=>+data[s.id].turbidity_ntu.toFixed(1));
+
+  if(chartDOTurb)chartDOTurb.destroy();
+  chartDOTurb=new Chart(document.getElementById("chart-do-turb"),{
+    type:"bar",
+    data:{labels,datasets:[
+      {label:"DO mg/L",data:doVals,backgroundColor:"rgba(77,166,255,0.7)",borderColor:"#4da6ff",borderWidth:1,borderRadius:3},
+      {label:"Turbidity NTU",data:turbVals,backgroundColor:"rgba(245,166,35,0.7)",borderColor:"#f5a623",borderWidth:1,borderRadius:3}
+    ]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{
+      x:{ticks:{color:"rgba(138,200,192,0.7)",font:{size:10}},grid:{color:"rgba(0,210,255,0.05)"}},
+      y:{ticks:{color:"rgba(138,200,192,0.7)",font:{size:10}},grid:{color:"rgba(0,210,255,0.07)"}}
+    }}
+  });
+}
+
+function buildAdvancedCharts(forecastRows) {
+    if(!forecastRows || forecastRows.length === 0) return;
+
+    const timeLabels = forecastRows.map(r => {
+        let d = new Date(r.forecast_time);
+        return d.getHours() + ":00";
+    });
+
+    const predictedTide = forecastRows.map(r => r.tide_height_m);
+    const windSpeeds = forecastRows.map(r => r.wind_speed_ms);
+    const risks = forecastRows.map((r, i) => {
+        let baseTurb = Object.values(liveData).reduce((s,d)=>s+d.turbidity_ntu,0)/Object.values(liveData).length || 25;
+        return Math.min(100, Math.round((r.wind_speed_ms * 6) + (baseTurb * 0.6)));
+    });
+
+    const liveAvgDepth = Object.values(liveData).reduce((s,d)=>s+d.water_depth_meters,0)/Object.values(liveData).length || 8.5;
+    const relativeLiveTide = (liveAvgDepth - 8.5);
+
+    const liveDataPoints = new Array(forecastRows.length).fill(null);
+    liveDataPoints[0] = relativeLiveTide;
+
+    if(chartCompare) chartCompare.destroy();
+    chartCompare = new Chart(document.getElementById("chart-compare"),{
+        type:"line",
+        data:{
+            labels: timeLabels,
+            datasets:[
+                {label:"Predicted Tide (m)", data: predictedTide, borderColor:"#00d2ff", backgroundColor:"rgba(0,210,255,0.05)", borderWidth:2, fill:true, tension:0.4, pointRadius:1},
+                {label:"Live Target", data: liveDataPoints, borderColor:"#ff4d4d", backgroundColor:"#ff4d4d", borderWidth:3, pointRadius:6, pointStyle:'rectRot', showLine:false}
+            ]
+        },
+        options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{color:"rgba(138,200,192,0.7)",font:{size:10}},grid:{color:"rgba(0,210,255,0.05)"}},y:{ticks:{color:"rgba(138,200,192,0.7)",font:{size:10}},grid:{color:"rgba(0,210,255,0.07)"}}}}
+    });
+
+    if(chartWind) chartWind.destroy();
+    chartWind = new Chart(document.getElementById("chart-wind-trends"), {
+        type: "line",
+        data: {
+            labels: timeLabels,
+            datasets: [{label: "Wind Velocity (m/s)", data: windSpeeds, borderColor: "var(--amber)", backgroundColor: "rgba(245,166,35,0.05)", borderWidth:1.5, tension:0.2, pointRadius: 2}]
+        },
+        options: {responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{color:"rgba(138,200,192,0.7)",font:{size:10}},grid:{color:"rgba(0,210,255,0.05)"}},y:{ticks:{color:"rgba(138,200,192,0.7)",font:{size:10}},grid:{color:"rgba(0,210,255,0.07)"}}}}
+    });
+
+    if(chartRisk) chartRisk.destroy();
+    chartRisk = new Chart(document.getElementById("chart-environmental-risk"), {
+        type: "line",
+        data: {
+            labels: timeLabels,
+            datasets: [{label: "Risk Index %", data: risks, borderColor: "var(--red)", backgroundColor: "rgba(255,77,77,0.1)", borderWidth:2, fill:true, tension:0.3, pointRadius: 0}]
+        },
+        options: {responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{color:"rgba(138,200,192,0.7)",font:{size:10}},grid:{color:"rgba(0,210,255,0.05)"}},y:{min:0, max:100, ticks:{color:"rgba(138,200,192,0.7)",font:{size:10}},grid:{color:"rgba(0,210,255,0.07)"}}}}
+    });
+}
+
+// --- UPGRADED FILTER & EXPORT LOGIC ---
+function applyFilters() {
+    clearInterval(fetchInterval);
+    
+    // Update the Profile target text based on selection
+    let stationVal = document.getElementById('station-filter').value;
+    let targetText = "ALL BUOYS (140km)";
+    if(stationVal !== "ALL") {
+        let st = STATIONS.find(s => s.id === stationVal);
+        if(st) targetText = `NODE ISOLATED: ${st.name}`;
+    }
+    document.getElementById('profile-target').textContent = targetText;
+    
+    fetchLatest();
+}
+
+function resetFilters() {
+    document.getElementById('station-filter').value = "ALL";
+    document.getElementById('hist-date').value = "";
+    document.getElementById('hist-start').value = "";
+    document.getElementById('hist-end').value = "";
+    document.getElementById('profile-target').textContent = "ALL BUOYS (140km)";
+    
+    clearInterval(fetchInterval);
+    fetchLatest();
+    fetchInterval = setInterval(fetchLatest, 120000); 
+}
+
+function exportCSV() {
+    if(!globalFetchedData || globalFetchedData.length===0) return alert("No data available to export.");
+    const link = document.createElement("a");
+    const headers = Object.keys(globalFetchedData[0]).join(",");
+    const rows = globalFetchedData.map(o => Object.values(o).join(",")).join("\n");
+    link.setAttribute("href", encodeURI("data:text/csv;charset=utf-8," + headers + "\n" + rows));
+    link.setAttribute("download", `OmiEko_Telemetry_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link); link.click(); document.body.removeChild(link);
+}
+
+// --- FETCH PIPELINE PLATFORM ---
+async function fetchLatest(){
+  const stationVal = document.getElementById('station-filter').value;
+  const dateVal = document.getElementById('hist-date').value;
+  const startVal = document.getElementById('hist-start').value;
+  const endVal = document.getElementById('hist-end').value;
+
+  let ep = `${SUPABASE_URL}/rest/v1/marine_sensors?select=*`;
+  
+  // Apply Station Filter to Supabase Query
+  if(stationVal !== "ALL") {
+      ep += `&sensor_id=eq.${stationVal}`;
+  }
+  
+  // Apply Time Filters
+  if(dateVal) {
+      let sTime = startVal ? startVal+":00" : "00:00:00";
+      let eTime = endVal ? endVal+":59" : "23:59:59";
+      ep += `&recorded_at=gte.${dateVal}T${sTime}&recorded_at=lte.${dateVal}T${eTime}&order=recorded_at.asc`;
+      document.getElementById('sys-mode').textContent = "HISTORICAL QUERY";
+  } else {
+      ep += `&order=recorded_at.desc&limit=60`;
+      document.getElementById('sys-mode').textContent = "LIVE OPERATIONS";
+  }
+
+  try{
+    const res=await fetch(ep,{
+      headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${SUPABASE_KEY}`,"Content-Type":"application/json"}
+    });
+    const rows=await res.json();
+    if(!Array.isArray(rows)||rows.length===0){loadMockData();return;}
+    
+    globalFetchedData = rows;
+    const latest={};
+    rows.forEach(r=>{latest[r.sensor_id]=r;});
+    
+    // If we filtered by 1 station, we expect 1 key. If no filter, we expect at least 3.
+    if(stationVal === "ALL" && Object.keys(latest).length<3){loadMockData();return;}
+    
+    liveData=latest;
+    
+    updateHardwareDiagnostics();
+    renderTable(liveData);
+    updateKPIs(liveData);
+    updateAlerts(liveData);
+    updateRadar(liveData);
+    updateSpatialMap(liveData); 
+    buildCharts(liveData);
+    
+    document.getElementById("last-update").textContent=`LAST: ${new Date().toTimeString().slice(0,8)}`;
+    fetchForecast();
+  }catch(e){loadMockData();}
+}
+
+async function fetchSatellite() {
+    let ep = `${SUPABASE_URL}/rest/v1/satellite_turbidity_plumes?select=*&order=capture_date.desc&limit=50`;
+    try {
+        const res = await fetch(ep, { headers: {"apikey":SUPABASE_KEY,"Authorization":`Bearer ${SUPABASE_KEY}`} });
+        const rows = await res.json();
+        if(!Array.isArray(rows)) return;
+        
+        satelliteLayer.clearLayers();
+        rows.forEach(r => {
+            L.geoJSON(r.geom_geojson, {
+                style: { fillColor: '#ffaa00', color: '#ffaa00', weight: 1, fillOpacity: 0.25 }
+            }).bindPopup(`<b>Sentinel-2 Spatial Plume</b><br>Mean NDTI: ${r.mean_ndti.toFixed(3)}`).addTo(satelliteLayer);
+        });
+    } catch(e) { console.error(e); }
+}
+
+async function fetchForecast() {
+    let now = new Date().toISOString();
+    let ep = `${SUPABASE_URL}/rest/v1/forecast_telemetry?select=*&forecast_time=gte.${now}&order=forecast_time.asc&limit=12`;
+    try {
+        const res = await fetch(ep, { headers: {"apikey":SUPABASE_KEY,"Authorization":`Bearer ${SUPABASE_KEY}`} });
+        const rows = await res.json();
+        if(!Array.isArray(rows) || rows.length === 0) return;
+        
+        const next = rows[0];
+        
+        document.getElementById('kpi-tide').textContent = next.tide_height_m > 0.6 ? "HIGH TIDE" : (next.tide_height_m < -0.3 ? "LOW TIDE" : "EBB");
+        document.getElementById('tide-label-bottom').textContent = next.tide_height_m > 0.6 ? "HIGH TIDE" : (next.tide_height_m < -0.3 ? "LOW TIDE" : "EBB");
+        
+        document.getElementById('kpi-ext-wave').textContent = (Math.abs(next.tide_height_m) * 0.4 + 0.2).toFixed(2) + " m";
+        document.getElementById('kpi-ext-wind').textContent = next.wind_speed_ms.toFixed(1) + " m/s";
+        document.getElementById('kpi-ext-rain').textContent = (next.wind_speed_ms > 6.5 ? 4.2 : 0.0).toFixed(1) + " mm";
+
+        buildAdvancedCharts(rows);
+    } catch(e) { console.error(e); }
+}
+
+function loadMockData(){
+  const mock=[
+    {sensor_id:"SENS-LAG-01",location_name:"Admiralty Way",water_depth_meters:6.5,turbidity_ntu:25.0,dissolved_oxygen_mgl:5.5,salinity_ppt:18.0,temperature_c:28.5,current_speed_ms:0.5,current_direction_deg:90},
+    {sensor_id:"SENS-LAG-02",location_name:"Eko Atlantic",water_depth_meters:15.2,turbidity_ntu:10.0,dissolved_oxygen_mgl:6.8,salinity_ppt:30.0,temperature_c:27.2,current_speed_ms:1.2,current_direction_deg:180},
+    {sensor_id:"SENS-LAG-03",location_name:"Ebute Metta",water_depth_meters:4.5,turbidity_ntu:55.0,dissolved_oxygen_mgl:3.2,salinity_ppt:8.0,temperature_c:29.8,current_speed_ms:0.3,current_direction_deg:210},
+    {sensor_id:"SENS-LAG-04",location_name:"Banana Island",water_depth_meters:8.5,turbidity_ntu:20.0,dissolved_oxygen_mgl:6.0,salinity_ppt:22.0,temperature_c:28.1,current_speed_ms:0.8,current_direction_deg:110},
+    {sensor_id:"SENS-LAG-05",location_name:"Lekki Peninsula",water_depth_meters:7.0,turbidity_ntu:65.0,dissolved_oxygen_mgl:4.1,salinity_ppt:19.0,temperature_c:29.0,current_speed_ms:0.4,current_direction_deg:270},
+    {sensor_id:"SENS-LAG-06",location_name:"Lagos Island",water_depth_meters:10.5,turbidity_ntu:35.0,dissolved_oxygen_mgl:4.8,salinity_ppt:24.0,temperature_c:28.3,current_speed_ms:0.9,current_direction_deg:160}
+  ];
+  
+  // Check if a specific station is filtered during mock loading
+  const stationVal = document.getElementById('station-filter').value;
+  let activeMock = mock;
+  if(stationVal !== "ALL") {
+      activeMock = mock.filter(m => m.sensor_id === stationVal);
+  }
+
+  const noise=(v,r)=>+(v+((Math.random()-0.5)*2*r)).toFixed(2);
+  const latest={};
+  activeMock.forEach(r=>{
+    latest[r.sensor_id]={...r,turbidity_ntu:noise(r.turbidity_ntu,4),dissolved_oxygen_mgl:Math.max(0.5,noise(r.dissolved_oxygen_mgl,0.3)),temperature_c:noise(r.temperature_c,0.2),salinity_ppt:noise(r.salinity_ppt,1),water_depth_meters:noise(r.water_depth_meters,0.1),current_speed_ms:Math.max(0,noise(r.current_speed_ms,0.1)),current_direction_deg:((r.current_direction_deg+noise(0,5))+360)%360};
+  });
+  liveData=latest;
+  
+  updateHardwareDiagnostics();
+  renderTable(liveData);
+  updateKPIs(liveData);
+  updateAlerts(liveData);
+  updateRadar(liveData);
+  updateSpatialMap(liveData);
+  buildCharts(liveData);
+  document.getElementById("last-update").textContent=`LAST: ${new Date().toTimeString().slice(0,8)} (MOCK)`;
+}
+
+// EXECUTION ENGINES STARTUP
+setInterval(updateClock,1000);
+updateClock();
+animateRadar();
+
+fetchLatest();
+fetchSatellite();
+
+fetchInterval = setInterval(fetchLatest, 120000); // 2 Min Polling interval loop matches IoT script speed
+satFetchInterval = setInterval(fetchSatellite, 300000);
+</script>
+</body>
+</html>
